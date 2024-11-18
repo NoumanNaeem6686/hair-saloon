@@ -248,18 +248,48 @@
                         name="bookingTime"
                         required
                       >
-                        <option value="" disabled selected>Select Booking Time</option>
-                        <option value="10:00 AM">10:00 AM</option>
-                        <option value="11:00 AM">11:00 AM</option>
-                        <option value="12:00 PM">12:00 PM</option>
-                        <option value="01:00 PM">01:00 PM</option>
-                        <option value="02:00 PM">02:00 PM</option>
-                        <option value="03:00 PM">03:00 PM</option>
-                        <option value="04:00 PM">04:00 PM</option>
+                        <!-- Time slots will be inserted here by JavaScript -->
                       </select>
                       <label for="bookingTime">Booking Time</label>
                     </div>
                   </div>
+                  
+                  <script>
+                    // Function to generate time slots in 30-minute intervals
+                    function generateTimeSlots() {
+                      const selectElement = document.getElementById('bookingTime');
+                      let startHour = 0;
+                      let startMinute = 0;
+                  
+                      for (let i = 0; i < 48; i++) {
+                        // Format hour and minute into 12-hour format with AM/PM
+                        let hour = startHour % 12 || 12; // Converts 0 hour to 12
+                        let minute = startMinute === 0 ? '00' : '30';
+                        let meridian = startHour < 12 ? 'AM' : 'PM';
+                        let nextHour = (startHour + (startMinute === 0 ? 0 : 1)) % 24;
+                        let nextMinute = startMinute === 0 ? '30' : '00';
+                        let nextMeridian = nextHour < 12 || nextHour === 24 ? 'AM' : 'PM';
+                        nextHour = nextHour % 12 || 12;
+                  
+                        const optionText = `${hour}:${minute} ${meridian} to ${nextHour}:${nextMinute} ${nextMeridian}`;
+                        const optionElement = document.createElement('option');
+                        optionElement.value = optionText;
+                        optionElement.textContent = optionText;
+                        selectElement.appendChild(optionElement);
+                  
+                        // Increment time by 30 minutes
+                        startMinute += 30;
+                        if (startMinute >= 60) {
+                          startMinute = 0;
+                          startHour += 1;
+                        }
+                      }
+                    }
+                  
+                    // Call the function on page load
+                    document.addEventListener('DOMContentLoaded', generateTimeSlots);
+                  </script>
+                  
                   <div class="col-12">
                     <div class="form-floating">
                       <textarea
@@ -413,6 +443,108 @@
 
     <!-- Template Javascript -->
     <script src="js/main.js"></script>
+
+    <script>
+      // Function to generate time slots in 30-minute intervals
+      function generateTimeSlots() {
+        const selectElement = document.getElementById('bookingTime');
+        let startHour = 0;
+        let startMinute = 0;
+    
+        for (let i = 0; i < 48; i++) {
+          // Format hour and minute into 12-hour format with AM/PM
+          let hour = startHour % 12 || 12; // Converts 0 hour to 12
+          let minute = startMinute === 0 ? '00' : '30';
+          let meridian = startHour < 12 ? 'AM' : 'PM';
+          let nextHour = (startHour + (startMinute === 0 ? 0 : 1)) % 24;
+          let nextMinute = startMinute === 0 ? '30' : '00';
+          let nextMeridian = nextHour < 12 || nextHour === 24 ? 'AM' : 'PM';
+          nextHour = nextHour % 12 || 12;
+    
+          const optionText = `${hour}:${minute} ${meridian} to ${nextHour}:${nextMinute} ${nextMeridian}`;
+          const optionElement = document.createElement('option');
+          optionElement.value = optionText;
+          optionElement.textContent = optionText;
+          selectElement.appendChild(optionElement);
+    
+          // Increment time by 30 minutes
+          startMinute += 30;
+          if (startMinute >= 60) {
+            startMinute = 0;
+            startHour += 1;
+          }
+        }
+    
+        // Fetch and handle unavailability data
+        fetchUnavailabilityData();
+      }
+    
+      // Function to fetch unavailability data from the backend
+      async function fetchUnavailabilityData() {
+        try {
+          const response = await fetch('https://hair-saloon-backend.vercel.app/api/user/get-all-unavailability');
+          const data = await response.json();
+    
+          console.log("Unavailability Data:", data);
+    
+          // Extract unavailability slots
+          const unavailabilitySlots = data.unavailabilitySlots || [];
+    
+          const selectElement = document.getElementById('bookingTime');
+          const options = selectElement.options;
+    
+          // Get selected date from form (convert to Date object for accurate comparison)
+          const selectedDate = document.getElementById('bookingDate').value;
+          const selectedDateObj = new Date(selectedDate);
+    
+          // Filter options based on unavailability slots
+          unavailabilitySlots.forEach(({ startDate, startTime, endDate, endTime }) => {
+            const parsedStartDate = new Date(startDate);
+            const parsedEndDate = new Date(endDate);
+    
+            // Only proceed if selected date matches the unavailable date
+            if (selectedDateObj.toDateString() === parsedStartDate.toDateString()) {
+              // Parse times into Date objects relative to the selected date
+              const parsedStartTime = parseTime(startTime, selectedDateObj);
+              const parsedEndTime = parseTime(endTime, selectedDateObj);
+    
+              for (let i = 0; i < options.length; i++) {
+                const optionText = options[i].value;
+                const [slotStart, slotEnd] = optionText.split(' to ');
+                const slotStartTime = parseTime(slotStart, selectedDateObj);
+                const slotEndTime = parseTime(slotEnd, selectedDateObj);
+    
+                // Check if slot overlaps with unavailable range
+                if (
+                  (slotStartTime >= parsedStartTime && slotStartTime < parsedEndTime) ||
+                  (slotEndTime > parsedStartTime && slotEndTime <= parsedEndTime)
+                ) {
+                  options[i].style.display = 'none'; // Hide unavailable option
+                }
+              }
+            }
+          });
+        } catch (error) {
+          console.error('Error fetching unavailability data:', error);
+        }
+      }
+    
+      // Helper function to parse time string (e.g., "13:00") into a Date object for a given date
+      function parseTime(timeString, baseDate) {
+        let [hours, minutes] = timeString.split(':').map(Number);
+    
+        const date = new Date(baseDate);
+        date.setHours(hours, minutes, 0, 0);
+        return date;
+      }
+    
+      // Call the function on page load
+      document.addEventListener('DOMContentLoaded', generateTimeSlots);
+    </script>
+    
+    
+    
+    
 
     <script>
       // Initialize Stripe with your publishable key
